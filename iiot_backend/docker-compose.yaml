@@ -1,0 +1,27 @@
+services:
+  # 1. Time-Series база данных
+  timescaledb:
+    image: timescale/timescaledb:latest-pg15
+    container_name: iiot_db
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: secretpassword
+      POSTGRES_DB: iiot_factory
+    ports:
+      - "5432:5432"
+    volumes:
+      - timescaledb_data:/var/lib/postgresql/data
+    restart: always
+
+  # 2. MQTT Брокер
+  mosquitto:
+    image: eclipse-mosquitto:latest
+    container_name: iiot_broker
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
+    restart: always
+
+volumes:
+  timescaledb_data:
