@@ -16,7 +16,7 @@ class NewTelemetryDTO:
 
 @dataclass(slots=True)
 class AlertDTO:
-    "DTO для сигналов об анмалиях"
+    "DTO для сигналов об аномалиях"
 
     machine_id: int
     alert_type: str
