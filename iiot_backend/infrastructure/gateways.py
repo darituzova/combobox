@@ -5,7 +5,7 @@ from application.interfaces import TelemetrySaver
 from domain.entities import TelemetryDM
 
 class TelemetryGateway(TelemetrySaver):
-    def __init__(self):
+    def __init__(self, session: AsyncSession):
         self._session = session
 
     async def save(self, telemetry: TelemetryDM):
@@ -19,7 +19,7 @@ class TelemetryGateway(TelemetrySaver):
         """)
         await self._session.execute(
             statement=query,
-            parems = {
+            params = {
                 "time": telemetry.timestamp,
                 "machine_id": telemetry.machine_id,
                 "temperature": telemetry.temperature,
