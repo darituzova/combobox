@@ -22,3 +22,25 @@ async def receive_alert(
     await interactor(dto)
 
     return {"status": "alert_received"}
+
+
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
+@http_router.get("/api/v1/telemetry/latest")
+@inject
+async def get_latest_telemetry(session: FromDishka[AsyncSession]):
+    """
+    Грязный эндпоинт без архитектуры.
+    Берем сессию напрямую и делаем SELECT последних 10 записей.
+    """
+    query = text("SELECT * FROM telemetry ORDER BY time DESC LIMIT 10")
+    result = await session.execute(query)
+
+    # Превращаем результат БД в список словарей, чтобы FastAPI мог отдать это как JSON
+    rows = result.mappings().all()
+
+    return {
+        "status": "ok",
+        "count": len(rows),
+        "data": [dict(row) for row in rows]
+    }
