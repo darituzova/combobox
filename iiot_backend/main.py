@@ -30,8 +30,7 @@ def get_app():
     async def lifespan(app: FastAPI):
         await faststream_app.broker.start()
         yield
-        await faststream_app.broker.close()
-
+        await faststream_app.broker.disconnect()
     fastapi_app = FastAPI(title="IIoT Factory API", lifespan=lifespan)
     fastapi_app.include_router(http_router)
 

@@ -1,27 +1,44 @@
 services:
-  # 1. Time-Series база данных
-  timescaledb:
-    image: timescale/timescaledb:latest-pg15
-    container_name: iiot_db
+  # 1. База данных TimescaleDB
+  postgres:
+    image: timescale/timescaledb:latest-pg14
     environment:
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: secretpassword
-      POSTGRES_DB: iiot_factory
+      POSTGRES_DB: iiot_db
     ports:
-      - "5433:5432"
-    volumes:
-      - timescaledb_data:/var/lib/postgresql/data
-    restart: always
+      - "5432:5432"
+    # Добавляем проверку здоровья (healthcheck), чтобы бэкенд ждал запуска базы
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d iiot_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   # 2. MQTT Брокер
   mosquitto:
     image: eclipse-mosquitto:latest
-    container_name: iiot_broker
     ports:
       - "1883:1883"
     volumes:
       - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
-    restart: always
 
-volumes:
-  timescaledb_data:
+  # 3. Наш Python Бэкенд
+  backend:
+    build: .  # Указывает Docker'у собрать образ из Dockerfile в текущей папке
+    ports:
+      - "8000:8000"
+    environment:
+      # Переопределяем переменные окружения, чтобы бэкенд искал соседей по сети Docker
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=admin
+      - DB_PASSWORD=secretpassword
+      - DB_NAME=iiot_db
+      - MQTT_HOST=mosquitto
+      - MQTT_PORT=1883
+    depends_on:
+      postgres:
+        condition: service_healthy # Бэкенд запустится только когда база ответит "я готова"
+      mosquitto:
+        condition: service_started
