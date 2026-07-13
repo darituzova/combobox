@@ -9,8 +9,6 @@ from infrastructure.gateways import TelemetryGateway
 from infrastructure.database import new_session_maker
 from core.config import AppConfig
 
-from controllers.http import ProcessAlertInteractorStub
-
 class AppProvider(Provider):
 
     config = from_context(provides=AppConfig, scope=Scope.APP)
@@ -36,5 +34,3 @@ class AppProvider(Provider):
     )
 
     save_telemetry_interactor = provide(SaveTelemetryInteractor, scope=Scope.REQUEST)
-
-    process_alert_interactor = provide(ProcessAlertInteractorStub, scope=Scope.REQUEST)
