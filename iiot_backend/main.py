@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-
+from controllers.auth import auth_router
 import dishka_faststream
 from dishka import make_async_container
 from dishka.integrations.fastapi import setup_dishka
@@ -33,6 +33,7 @@ def get_app():
         await faststream_app.broker.disconnect()
     fastapi_app = FastAPI(title="IIoT Factory API", lifespan=lifespan)
     fastapi_app.include_router(http_router)
+    fastapi_app.include_router(auth_router)
 
     setup_dishka(container, fastapi_app)
 

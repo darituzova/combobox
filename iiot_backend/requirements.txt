@@ -10,3 +10,6 @@ opentelemetry-semantic-conventions>=0.46b0
 opentelemetry-sdk>=1.25.0
 dishka-faststream
 websockets
+PyJWT
+passlib
+bcrypt==3.2.2

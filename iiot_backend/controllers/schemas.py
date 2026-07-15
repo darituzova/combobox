@@ -30,3 +30,27 @@ class HistoryRecordResponse(BaseModel):
     timestamp: str = Field(..., description="Время в формате ISO 8601 (с Z на конце)")
     telemetry: TelemetryDataResponse
     anomaly_flag: int = Field(default=0, description="1 если аномалия, 0 если всё ок")
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+class RegisterRequest(BaseModel):
+    name: str
+    email: str
+    password: str
+    confirm_password: str
+
+class ResetPasswordRequest(BaseModel):
+    email: str
+
+class UserResponse(BaseModel):
+    id: int
+    name: str
+    email: str
+    role: str
+
+class TokenResponse(BaseModel):
+    token: str
+    refresh_token: str
+    user: UserResponse
