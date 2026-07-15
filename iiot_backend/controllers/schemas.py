@@ -114,3 +114,54 @@ class MachineDetail(BaseModel):
     trust_indicator: str = "online"
     anomaly_count: int = 0
     location: MachineLocation
+
+class KPIData(BaseModel):
+    total_machines: int
+    online_machines: int
+    critical_alerts: int
+    system_health: int
+
+class DashboardImportantMachine(BaseModel):
+    id: int
+    name: str
+    parameter: str
+    value: float
+    unit: str
+    status: str
+    updated_at: Optional[str]
+
+class DashboardImportantResponse(BaseModel):
+    machines: List[DashboardImportantMachine]
+
+class ChartDataPoint(BaseModel):
+    time: str
+    value: float
+    is_anomaly: bool = False
+
+class ChartDataResponse(BaseModel):
+    machine_id: int
+    parameter: str
+    unit: str
+    data: List[ChartDataPoint]
+    anomaly_points: List[ChartDataPoint]
+
+class DashboardRecentAlert(BaseModel):
+    id: int
+    machine_name: str
+    message: str
+    resolved_at: str
+
+class DashboardRecentAlertsResponse(BaseModel):
+    alerts: List[DashboardRecentAlert]
+
+class DashboardSuspectMachine(BaseModel):
+    id: int
+    name: str
+    issue: str
+    value: float
+    unit: str
+    threshold: float
+
+class DashboardSuspectResponse(BaseModel):
+    machines: List[DashboardSuspectMachine]
+

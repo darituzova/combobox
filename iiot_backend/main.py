@@ -13,6 +13,7 @@ from core.ioc import AppProvider
 from controllers.http import http_router
 from controllers.mqtt import MQTTController
 from controllers.map import map_router
+from controllers.dashboard import dashboard_router
 from controllers.machines import machines_router
 
 container = make_async_container(AppProvider(), context={AppConfig: config})
@@ -51,6 +52,7 @@ def get_app():
     fastapi_app.include_router(auth_router)
     fastapi_app.include_router(map_router)
     fastapi_app.include_router(machines_router)
+    fastapi_app.include_router(dashboard_router)
 
     setup_dishka(container, fastapi_app)
 
