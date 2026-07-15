@@ -4,6 +4,7 @@ import dishka_faststream
 from dishka import make_async_container
 from dishka.integrations.fastapi import setup_dishka
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from faststream import FastStream
 from faststream.mqtt import MQTTBroker
 
@@ -11,6 +12,8 @@ from core.config import config, AppConfig
 from core.ioc import AppProvider
 from controllers.http import http_router
 from controllers.mqtt import MQTTController
+from controllers.map import map_router
+from controllers.machines import machines_router
 
 container = make_async_container(AppProvider(), context={AppConfig: config})
 
@@ -31,9 +34,23 @@ def get_app():
         await faststream_app.broker.start()
         yield
         await faststream_app.broker.disconnect()
+
     fastapi_app = FastAPI(title="IIoT Factory API", lifespan=lifespan)
+
+    # НАСТРОЙКА CORS ДЛЯ ФРОНТЕНДА
+    fastapi_app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    # Подключаем роутеры
     fastapi_app.include_router(http_router)
     fastapi_app.include_router(auth_router)
+    fastapi_app.include_router(map_router)
+    fastapi_app.include_router(machines_router)
 
     setup_dishka(container, fastapi_app)
 

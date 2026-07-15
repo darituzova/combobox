@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
 class TelemetryValues(BaseModel):
     temperature: float
@@ -54,3 +54,63 @@ class TokenResponse(BaseModel):
     token: str
     refresh_token: str
     user: UserResponse
+
+
+class MapDeviceItem(BaseModel):
+    id: int
+    name: str
+    building: Optional[str]
+    floor: Optional[int]
+    latitude: Optional[float]
+    longitude: Optional[float]
+    status: str
+    value: float = 0.0      # Текущее значение (пока заглушка, позже свяжем с телеметрией)
+    unit: str = ""
+    updated_at: Optional[str]
+    type: str
+
+class MapDevicesResponse(BaseModel):
+    devices: List[MapDeviceItem]
+
+class MapDeviceDetail(MapDeviceItem):
+    trust_indicator: str = "online"
+
+# ==========================================
+# СХЕМЫ ДЛЯ СТАНКОВ (Раздел 4)
+# ==========================================
+class MachineListItem(BaseModel):
+    id: int
+    name: str
+    type: str
+    value: float = 0.0
+    unit: str = ""
+    status: str
+    building: Optional[str]
+    floor: Optional[int]
+    updated_at: Optional[str]
+
+class MachineListResponse(BaseModel):
+    total: int
+    page: int
+    limit: int
+    total_pages: int
+    data: List[MachineListItem]
+
+class MachineLocation(BaseModel):
+    building: Optional[str]
+    floor: Optional[int]
+    room: Optional[str]
+
+class MachineDetail(BaseModel):
+    id: int
+    name: str
+    type: str
+    value: float = 0.0
+    unit: str = ""
+    status: str
+    building: Optional[str]
+    floor: Optional[int]
+    updated_at: Optional[str]
+    trust_indicator: str = "online"
+    anomaly_count: int = 0
+    location: MachineLocation
