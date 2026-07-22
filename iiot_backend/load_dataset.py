@@ -1,15 +1,15 @@
 import asyncio
+import csv
 import asyncpg
 import os
-import random
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
 load_dotenv()
 
-async def init_db():
-    print("🔌 Подключение к базе данных для инициализации...")
+async def main():
+    print("🔌 Подключение к БД для инициализации датасета...")
 
-    # ПУЛЕНЕПРОБИВАЕМОЕ ПОДКЛЮЧЕНИЕ (ЖДЕМ БАЗУ ДО 30 СЕКУНД)
     conn = None
     for i in range(15):
         try:
@@ -20,7 +20,7 @@ async def init_db():
                 host=os.getenv("DB_HOST"),
                 port=os.getenv("DB_PORT")
             )
-            break # Успешно подключились, выходим из цикла
+            break
         except Exception as e:
             print(f"⏳ База еще не готова, ждем... ({i+1}/15)")
             await asyncio.sleep(2)
@@ -29,5 +29,64 @@ async def init_db():
         print("❌ Не удалось подключиться к базе данных.")
         return
 
-    print("🏗 Создание архитектуры таблиц (Контракты ТЗ)...")
-    # ... дальше весь твой старый код создания таблиц ...
+    try:
+        count = await conn.fetchval("SELECT COUNT(*) FROM telemetry")
+        if count > 0:
+            print(f"✅ База уже содержит {count} записей. Пропускаем загрузку.")
+            await conn.close()
+            return
+    except Exception as e:
+        pass
+
+    print("📂 Чтение файла smart_manufacturing_data.csv...")
+    raw_records = []
+    max_csv_time = datetime.min
+
+    with open('smart_manufacturing_data.csv', 'r', encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            dt = datetime.strptime(row['timestamp'], '%Y-%m-%d %H:%M:%S')
+
+            if dt > max_csv_time:
+                max_csv_time = dt
+
+            raw_records.append({
+                "dt": dt,
+                "m_id": int(row['machine_id']),
+                "temp": float(row['temperature']),
+                "vib": float(row['vibration']),
+                "hum": float(row['humidity']),
+                "pres": float(row['pressure']),
+                "energy": float(row['energy_consumption'])
+            })
+
+    # ==========================================
+    # СДВИГ ВРЕМЕНИ (TIME SHIFT)
+    # ==========================================
+    now = datetime.now()
+    time_shift = now - max_csv_time # Вычисляем разницу
+
+    print(f"⏱ Максимальное время в CSV: {max_csv_time}")
+    print(f"⏩ Сдвигаем всю историю виртуального завода на {time_shift} вперед (к текущему моменту)...")
+
+    records = []
+    for r in raw_records:
+        shifted_dt = r["dt"] + time_shift # Прибавляем разницу
+        records.append((
+            shifted_dt, r["m_id"], r["temp"], r["vib"], r["hum"], r["pres"], r["energy"]
+        ))
+
+    print(f"🚀 Подготовлено {len(records)} записей. Заливаем в TimescaleDB...")
+
+    query = """
+        INSERT INTO telemetry
+        (time, machine_id, temperature, vibration, humidity, pressure, energy_consumption)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+    """
+
+    await conn.executemany(query, records)
+    await conn.close()
+    print("✅ Успех! Исторические данные актуализированы до сегодняшнего дня.")
+
+if __name__ == "__main__":
+    asyncio.run(main())
