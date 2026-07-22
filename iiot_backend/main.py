@@ -16,6 +16,8 @@ from controllers.map import map_router
 from controllers.dashboard import dashboard_router
 from controllers.machines import machines_router
 from controllers.alerts import alerts_router
+from controllers.comparison import comparison_router
+from controllers.settings import settings_router
 
 container = make_async_container(AppProvider(), context={AppConfig: config})
 
@@ -55,6 +57,8 @@ def get_app():
     fastapi_app.include_router(machines_router)
     fastapi_app.include_router(dashboard_router)
     fastapi_app.include_router(alerts_router)
+    fastapi_app.include_router(comparison_router)
+    fastapi_app.include_router(settings_router)
 
     setup_dishka(container, fastapi_app)
 

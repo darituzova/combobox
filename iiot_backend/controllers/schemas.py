@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Any, Dict
 
 class TelemetryValues(BaseModel):
     temperature: float
@@ -188,3 +188,43 @@ class AlertListResponse(BaseModel):
     limit: int
     data: List[AlertItem]
     stats: AlertStats
+
+class SensorItem(BaseModel):
+    id: int
+    name: str
+    type: str
+    type_label: str
+    unit: str
+    color: str
+
+class ComparisonDeviceData(BaseModel):
+    id: int
+    name: str
+    unit: str
+    data: List[ChartDataPoint]
+
+class ComparisonResponse(BaseModel):
+    devices: List[ComparisonDeviceData]
+    period: Dict[str, str]
+
+class SystemSettingsSchema(BaseModel):
+    escalation_timeout: int
+    channels: Dict[str, bool]
+    priorities: Dict[str, Any]
+
+class UserSettingsSchema(BaseModel):
+    important_sensors: List[int]
+    default_chart_sensor: int
+    theme: str
+    email_notifications: bool
+    refresh_interval: int
+
+class SettingsResponse(BaseModel):
+    system: SystemSettingsSchema
+    user: UserSettingsSchema
+
+class ImportantSensorsRequest(BaseModel):
+    sensor_ids: List[int]
+
+class DefaultChartRequest(BaseModel):
+    sensor_id: int
