@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Query, HTTPException, WebSocket, WebSocketDisconnect
 from dishka.integrations.fastapi import FromDishka, inject
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
-from controllers.schemas import AlertListResponse
+from core.websocket import manager
+from controllers.schemas import AlertListResponse, IncomingAlertSchema
 
 alerts_router = APIRouter(prefix="/api/v1/alerts", tags=["История алертов"])
 
@@ -75,6 +76,47 @@ async def get_alerts(
         "total": total, "page": page, "limit": limit, "data": data,
         "stats": {"pending": pending, "acknowledged": acknowledged, "escalated": escalated, "total": total}
     }
+
+@alerts_router.websocket("/ws/alerts")
+async def websocket_endpoint(websocket: WebSocket):
+    """Сюда подключается веб-интерфейс Фронтенда для мгновенного приема аномалий"""
+    await manager.connect(websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+
+@alerts_router.post("", summary="Отправить сигнал об аномалии (Для Аналитика)")
+@inject
+async def receive_alert(data: IncomingAlertSchema, session: FromDishka[AsyncSession]):
+    query = text("""
+        INSERT INTO alerts (machine_id, message, severity, status)
+        VALUES (:m_id, :msg, :sev, 'pending')
+        RETURNING id, timestamp
+    """)
+    result = await session.execute(query, {
+        "m_id": data.machine_id,
+        "msg": data.alert_type,
+        "sev": "critical"
+    })
+    await session.commit()
+    new_alert = result.mappings().first()
+
+    ws_message = {
+      "event": "new_alert",
+      "data": {
+        "id": new_alert["id"],
+        "machine_id": data.machine_id,
+        "machine_name": f"Станок #{data.machine_id}",
+        "message": data.alert_type,
+        "severity": "critical",
+        "timestamp": new_alert["timestamp"].strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "status": "pending"
+      }
+    }
+    await manager.broadcast(ws_message)
+    return {"status": "alert_broadcasted", "message": ws_message}
 
 @alerts_router.post("/{id}/acknowledge", summary="6.2 Подтверждение аварии")
 @inject

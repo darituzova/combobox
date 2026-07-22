@@ -10,7 +10,6 @@ from faststream.mqtt import MQTTBroker
 
 from core.config import config, AppConfig
 from core.ioc import AppProvider
-from controllers.http import http_router
 from controllers.mqtt import MQTTController
 from controllers.map import map_router
 from controllers.dashboard import dashboard_router
@@ -18,6 +17,7 @@ from controllers.machines import machines_router
 from controllers.alerts import alerts_router
 from controllers.comparison import comparison_router
 from controllers.settings import settings_router
+from controllers.telemetry import telemetry_router
 
 container = make_async_container(AppProvider(), context={AppConfig: config})
 
@@ -51,7 +51,6 @@ def get_app():
     )
 
     # Подключаем роутеры
-    fastapi_app.include_router(http_router)
     fastapi_app.include_router(auth_router)
     fastapi_app.include_router(map_router)
     fastapi_app.include_router(machines_router)
@@ -59,6 +58,7 @@ def get_app():
     fastapi_app.include_router(alerts_router)
     fastapi_app.include_router(comparison_router)
     fastapi_app.include_router(settings_router)
+    fastapi_app.include_router(telemetry_router)
 
     setup_dishka(container, fastapi_app)
 

@@ -2,8 +2,10 @@ from fastapi import APIRouter, Query, HTTPException
 from dishka.integrations.fastapi import FromDishka, inject
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
-from controllers.schemas import MachineListResponse, MachineDetail
+from controllers.schemas import MachineListResponse, MachineDetail, HistoryRecordResponse
 import math
+from datetime import datetime, timedelta, timezone
+from typing import List
 
 machines_router = APIRouter(prefix="/api/v1/machines", tags=["Все станки"])
 
@@ -117,3 +119,45 @@ async def get_machine_detail(id: int, session: FromDishka[AsyncSession]):
             "room": r["room"]
         }
     }
+
+@machines_router.get("/{machine_id}/history", response_model=List[HistoryRecordResponse], summary="5.1 История показателей станка")
+@inject
+async def get_machine_history(
+    machine_id: int,
+    session: FromDishka[AsyncSession],
+    period: str = Query("1h", description="Период: 1h, 1d, 1w")
+):
+    now = datetime.now(timezone.utc)
+    if period.endswith('d'):
+        delta = timedelta(days=int(period[:-1]))
+    elif period.endswith('w'):
+        delta = timedelta(weeks=int(period[:-1]))
+    else:
+        val = period.replace('h', '')
+        delta = timedelta(hours=int(val) if val.isdigit() else 1)
+
+    start_time = now - delta
+
+    query = text("""
+        SELECT time, temperature, vibration, humidity, pressure, energy_consumption
+        FROM telemetry
+        WHERE machine_id = :machine_id AND time >= :start_time
+        ORDER BY time ASC
+    """)
+    result = await session.execute(query, {"machine_id": machine_id, "start_time": start_time})
+    rows = result.mappings().all()
+
+    response_data = []
+    for row in rows:
+        response_data.append({
+            "timestamp": row["time"].strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "telemetry": {
+                "temperature": row["temperature"],
+                "vibration": row["vibration"],
+                "humidity": row["humidity"],
+                "pressure": row["pressure"],
+                "energy_consumption": row["energy_consumption"],
+            },
+            "anomaly_flag": 0
+        })
+    return response_data
