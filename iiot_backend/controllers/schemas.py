@@ -165,3 +165,26 @@ class DashboardSuspectMachine(BaseModel):
 class DashboardSuspectResponse(BaseModel):
     machines: List[DashboardSuspectMachine]
 
+class AlertItem(BaseModel):
+    id: int
+    time: Optional[str]
+    device: str
+    message: str
+    priority: str
+    status: str
+    acknowledged_by: Optional[str]
+    acknowledged_at: Optional[str]
+    escalated_at: Optional[str]
+
+class AlertStats(BaseModel):
+    pending: int
+    acknowledged: int
+    escalated: int
+    total: int
+
+class AlertListResponse(BaseModel):
+    total: int
+    page: int
+    limit: int
+    data: List[AlertItem]
+    stats: AlertStats

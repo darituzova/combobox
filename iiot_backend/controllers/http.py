@@ -66,25 +66,37 @@ async def websocket_endpoint(websocket: WebSocket):
 # 2. КОНТРАКТ №3: Прием аномалии от Аналитика (HTTP POST)
 # ==========================================
 @http_router.post("/api/v1/alerts", summary="Отправить сигнал об аномалии (Для Аналитика)")
-async def receive_alert(data: IncomingAlertSchema):
-    """
-    Сюда отправляет данные модель машинного обучения (Аналитик).
-    Бэкенд транслирует полученный алерт по WebSocket на Фронтенд.
-    """
+@inject
+async def receive_alert(data: IncomingAlertSchema, session: FromDishka[AsyncSession]):
+    # 1. СОХРАНЯЕМ В БАЗУ ДАННЫХ
+    query = text("""
+        INSERT INTO alerts (machine_id, message, severity, status)
+        VALUES (:m_id, :msg, :sev, 'pending')
+        RETURNING id, timestamp
+    """)
+    result = await session.execute(query, {
+        "m_id": data.machine_id,
+        "msg": data.alert_type, # Из ТЗ аналитика берем название проблемы
+        "sev": "critical"
+    })
+    await session.commit() # Фиксируем в БД
+    new_alert = result.mappings().first()
+
+    # 2. ОТПРАВЛЯЕМ ПО WEBSOCKET ФРОНТЕНДУ (С новым ID из базы)
     ws_message = {
-      "event": "critical_anomaly",
+      "event": "new_alert",
       "data": {
+        "id": new_alert["id"],
         "machine_id": data.machine_id,
-        "failure_type": data.alert_type,
-        "downtime_risk": 1.0
+        "machine_name": f"Станок #{data.machine_id}",
+        "message": data.alert_type,
+        "severity": "critical",
+        "timestamp": new_alert["timestamp"].strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "status": "pending"
       }
     }
-
-    # Отправляем во все вебсосокеты
     await manager.broadcast(ws_message)
-
     return {"status": "alert_broadcasted", "message": ws_message}
-
 
 # ==========================================
 # 3. КОНТРАКТ №2: История для Фронтенда (HTTP GET)
@@ -178,11 +190,11 @@ async def receive_telemetry(
 # ==========================================
 # 5. ДИАГНОСТИКА: Просмотр последних записей в БД
 # ==========================================
-@http_router.get("/api/v1/telemetry/latest", summary="Диагностика: Показать 10 последних записей в БД")
+@http_router.get("/api/v1/telemetry/latest", summary="Диагностика: Показать 1000 последних записей в БД")
 @inject
 async def get_latest_telemetry(session: FromDishka[AsyncSession]):
     """Вспомогательный эндпоинт для быстрой проверки записи"""
-    query = text("SELECT * FROM telemetry ORDER BY time DESC LIMIT 10")
+    query = text("SELECT * FROM telemetry ORDER BY time DESC LIMIT 1000")
     result = await session.execute(query)
 
     rows = result.mappings().all()
