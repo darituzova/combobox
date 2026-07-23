@@ -44,24 +44,32 @@ async def get_comparison_data(
     if not ids:
         raise HTTPException(status_code=400, detail="Неверный формат device_ids")
 
-    # Считаем время
-    now = datetime.now(timezone.utc)
-    if period == '24h': delta = timedelta(days=1)
-    elif period == 'week': delta = timedelta(weeks=1)
-    else: delta = timedelta(hours=1)
-    start_time = now - delta
+    if period == '24h': seconds = 86400
+    elif period == 'week': seconds = 604800
+    elif period == 'month': seconds = 2592000
+    else: seconds = 3600
 
     devices_data = []
-    # Запрашиваем данные для каждого запрошенного станка
+    allowed_columns = {"temperature", "vibration", "humidity", "pressure", "energy_consumption"}
+
     for m_id in ids:
         m_res = await session.execute(text("SELECT name, type FROM machines WHERE id = :id"), {"id": m_id})
         machine = m_res.mappings().first()
         if not machine: continue
 
-        _, unit, _ = get_sensor_meta(machine["type"] if parameter == "default" else parameter)
+        actual_param = machine["type"] if parameter == "default" or parameter not in allowed_columns else parameter
+        if actual_param == "energy": actual_param = "energy_consumption"
+        if actual_param not in allowed_columns: actual_param = "temperature"
 
-        q_data = text(f"SELECT time, {parameter} as val FROM telemetry WHERE machine_id = :id AND time >= :start ORDER BY time ASC")
-        d_res = await session.execute(q_data, {"id": m_id, "start": start_time})
+        _, unit, _ = get_sensor_meta(actual_param)
+
+        q_data = text(f"""
+            SELECT time, {actual_param} as val
+            FROM telemetry
+            WHERE machine_id = :id AND time >= NOW() - INTERVAL '{seconds} seconds'
+            ORDER BY time ASC
+        """)
+        d_res = await session.execute(q_data, {"id": m_id})
 
         data_points = [{"time": row["time"].strftime("%Y-%m-%dT%H:%M:%SZ"), "value": round(row["val"], 2)}
                        for row in d_res.mappings().all() if row["val"] is not None]
@@ -70,8 +78,5 @@ async def get_comparison_data(
 
     return {
         "devices": devices_data,
-        "period": {
-            "from": start_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "to": now.strftime("%Y-%m-%dT%H:%M:%SZ")
-        }
+        "period": {"from": "calculated_by_db", "to": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
     }

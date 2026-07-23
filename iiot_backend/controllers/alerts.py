@@ -90,6 +90,13 @@ async def websocket_endpoint(websocket: WebSocket):
 @alerts_router.post("", summary="Отправить сигнал об аномалии (Для Аналитика)")
 @inject
 async def receive_alert(data: IncomingAlertSchema, session: FromDishka[AsyncSession]):
+    # 1. Проверяем приоритет (если прислали ерунду - ставим critical)
+    valid_severities = ['critical', 'warning', 'info']
+    sev = data.alert_type.lower() if data.alert_type.lower() in valid_severities else 'critical'
+
+    # 2. Текст берем из description, если его нет — из alert_type
+    msg = data.description if data.description else data.alert_type
+
     query = text("""
         INSERT INTO alerts (machine_id, message, severity, status)
         VALUES (:m_id, :msg, :sev, 'pending')
@@ -97,8 +104,8 @@ async def receive_alert(data: IncomingAlertSchema, session: FromDishka[AsyncSess
     """)
     result = await session.execute(query, {
         "m_id": data.machine_id,
-        "msg": data.alert_type,
-        "sev": "critical"
+        "msg": msg,
+        "sev": sev
     })
     await session.commit()
     new_alert = result.mappings().first()
@@ -109,8 +116,8 @@ async def receive_alert(data: IncomingAlertSchema, session: FromDishka[AsyncSess
         "id": new_alert["id"],
         "machine_id": data.machine_id,
         "machine_name": f"Станок #{data.machine_id}",
-        "message": data.alert_type,
-        "severity": "critical",
+        "message": msg,
+        "severity": sev,
         "timestamp": new_alert["timestamp"].strftime("%Y-%m-%dT%H:%M:%SZ"),
         "status": "pending"
       }

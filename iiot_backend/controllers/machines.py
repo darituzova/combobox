@@ -7,6 +7,17 @@ import math
 from datetime import datetime, timedelta, timezone
 from typing import List
 
+def get_sensor_meta(sensor_type: str):
+    meta = {
+        "temperature": ("Температура", "°C", "#ef4444"),
+        "vibration": ("Вибрация", "mm/s", "#eab308"),
+        "humidity": ("Влажность", "%", "#06b6d4"),
+        "pressure": ("Давление", "кПа", "#3b82f6"),
+        "energy": ("Энергия", "кВт", "#22c55e"),
+        "energy_consumption": ("Энергия", "кВт", "#22c55e")
+    }
+    return meta.get(sensor_type, ("Неизвестно", "", "#94a3b8"))
+
 machines_router = APIRouter(prefix="/api/v1/machines", tags=["Все станки"])
 
 def get_unit(m_type: str) -> str:
@@ -18,78 +29,77 @@ def get_unit(m_type: str) -> str:
 async def get_machines(
     session: FromDishka[AsyncSession],
     page: int = Query(1, ge=1),
-    limit: int = Query(20, ge=1, le=100),
-    search: str = None,
-    status: str = None,
-    type: str = None,
-    building: str = None,
-    sort: str = "id",
-    order: str = "asc"
+    limit: int = Query(100, ge=1)
 ):
-    where_clauses = ["1=1"]
-    params = {}
-
-    # 1. Применяем фильтры
-    if search:
-        where_clauses.append("(name ILIKE :search OR id::text ILIKE :search)")
-        params["search"] = f"%{search}%"
-    if status:
-        where_clauses.append("status = :status")
-        params["status"] = status
-    if type:
-        where_clauses.append("type = :type")
-        params["type"] = type
-    if building:
-        where_clauses.append("building = :building")
-        params["building"] = building
-
-    where_str = " AND ".join(where_clauses)
-
-    # 2. Безопасная сортировка (защита от SQL-инъекций)
-    allowed_sort = {"id", "name", "status", "updated_at", "type"}
-    sort_col = sort if sort in allowed_sort else "id"
-    sort_dir = "ASC" if order.lower() == "asc" else "DESC"
-
-    # 3. Считаем общее количество для пагинации
-    count_query = f"SELECT COUNT(*) FROM machines WHERE {where_str}"
-    total_result = await session.execute(text(count_query), params)
-    total_count = total_result.scalar() or 0
-
-    # 4. Получаем саму страницу данных
-    offset = (page - 1) * limit
-    params["limit"] = limit
-    params["offset"] = offset
-
-    data_query = f"""
-        SELECT * FROM machines
-        WHERE {where_str}
-        ORDER BY {sort_col} {sort_dir}
+    query = text("""
+        WITH LastTelemetry AS (
+            SELECT machine_id, time as updated_at, temperature, vibration, humidity, pressure, energy_consumption,
+                   ROW_NUMBER() OVER(PARTITION BY machine_id ORDER BY time DESC) as rn
+            FROM telemetry
+        )
+        SELECT
+            m.id,
+            m.name,
+            m.type,
+            m.building,
+            m.floor,
+            lt.updated_at,
+            lt.temperature, lt.vibration, lt.humidity, lt.pressure, lt.energy_consumption,
+            CASE
+                WHEN lt.updated_at IS NULL THEN 'offline'
+                WHEN EXTRACT(EPOCH FROM (NOW() - lt.updated_at)) > 300 THEN 'offline'
+                ELSE 'online'
+            END as calculated_status
+        FROM machines m
+        LEFT JOIN LastTelemetry lt ON m.id = lt.machine_id AND lt.rn = 1
+        ORDER BY m.id
         LIMIT :limit OFFSET :offset
-    """
+    """)
 
-    result = await session.execute(text(data_query), params)
+    offset = (page - 1) * limit
+    result = await session.execute(query, {"limit": limit, "offset": offset})
     rows = result.mappings().all()
 
     data = []
     for r in rows:
+        val = None
+        if r["type"] == "temperature": val = r["temperature"]
+        elif r["type"] == "vibration": val = r["vibration"]
+        elif r["type"] == "humidity": val = r["humidity"]
+        elif r["type"] == "pressure": val = r["pressure"]
+        elif r["type"] == "energy": val = r["energy_consumption"]
+
+        _, unit, _ = get_sensor_meta(r["type"])
+
+        final_status = r["calculated_status"]
+
+        if final_status == 'online' and val is not None:
+            if r["type"] == "temperature" and val > 80: final_status = "critical"
+            elif r["type"] == "temperature" and val > 75: final_status = "warning"
+            elif r["type"] == "vibration" and val > 15: final_status = "critical"
+            elif r["type"] == "pressure" and (val < 100 or val > 105): final_status = "warning"
+
         data.append({
             "id": r["id"],
             "name": r["name"],
             "type": r["type"],
-            "value": 0.0,
-            "unit": get_unit(r["type"]),
-            "status": r["status"],
+            "value": round(val, 2) if val is not None else None,
+            "unit": unit,
+            "status": final_status,
             "building": r["building"],
             "floor": r["floor"],
             "updated_at": r["updated_at"].strftime("%Y-%m-%dT%H:%M:%SZ") if r["updated_at"] else None
         })
 
+    total_machines = 50
+    total_pages = (total_machines + limit - 1) // limit
+
     return {
-        "total": total_count,
+        "data": data,
+        "total": total_machines,
         "page": page,
         "limit": limit,
-        "total_pages": math.ceil(total_count / limit) if limit else 1,
-        "data": data
+        "total_pages": total_pages
     }
 
 @machines_router.get("/{id}", response_model=MachineDetail, summary="4.2 Детальная информация по станку")

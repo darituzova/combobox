@@ -2,7 +2,7 @@ from fastapi import APIRouter
 from dishka.integrations.fastapi import FromDishka, inject
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
-
+from datetime import datetime, timezone
 from controllers.schemas import IncomingTelemetrySchema
 from application.interactors import SaveTelemetryInteractor
 
@@ -18,6 +18,7 @@ telemetry_router = APIRouter(prefix="/api/v1/telemetry", tags=["Телеметр
 async def receive_telemetry(data: IncomingTelemetrySchema, interactor: FromDishka[SaveTelemetryInteractor]):
     if TelemetryDM:
         dto = TelemetryDM(
+            timestamp=datetime.now(timezone.utc),
             machine_id=data.machine_id,
             temperature=data.telemetry.temperature,
             vibration=data.telemetry.vibration,
@@ -27,6 +28,7 @@ async def receive_telemetry(data: IncomingTelemetrySchema, interactor: FromDishk
         )
     else:
         dto = data
+
     await interactor(dto)
     return {"status": "telemetry_saved"}
 
